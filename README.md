@@ -23,20 +23,17 @@
 ### Riak Nagios
 
 #### Building
-There is a `build.erl` script that compiles the one common dependency `nagios.erl` into each escript. escripts are placed 
-in the `ebin` directory with the `check_riak` shell script for easy tgz'ing and deployment. I recommend `/usr/lib/riak_nagios`.
+'./rebar compile'
 
-#### Testing Locally
-You can use the local scripts for `riak-admin`, `riak-repl`, and anything else you might need to echo expected output.
+#### Deployment
+```
+➜  riak_nagios git:(jnd-otp-version) scp ebin/riak_nagios.beam root@s3p406.san2:/usr/lib/riak/lib/basho-patches/.
+➜  riak_nagios git:(jnd-otp-version) scp bin/nagtool root@s3p406.san2:/usr/lib/riak/erts-5.8.5/bin/nagtool
+➜  riak_nagios git:(jnd-otp-version) scp bin/riak-nagios root@s3p406.san2:/usr/sbin/riak-nagios
+```
 
-#### Testing Deployed Scripts
-We'll be using `check_riak up` as the example here. Once the scripts are deployed, running `./check_riak up` will give you 
-an idea if they're working, but you're not done. You'll want to test them as the nagios user.
+You'll also have to attach to the riak console and `l(riak_nagios).` to reload the module.
 
-You might be tempted to test with `sudo -u nagios -c "/usr/lib/riak_nagios/check_riak up"`, but sudo preserves your environment 
-settings, so a more accurare test would be to `su - nagios` and then `/usr/lib/riak_nagios/check_riak up`. The problem here 
-is that that the nagios user isn't usually set up for shell access. To temporarily allow shell access, open `/etc/passwd` and 
-on the nagios user's line, change `/bin/false` to `/bin/bash`. Don't forget to set it back to false when you're done.
 
 #### Permisions
 The Riak Nagios checks usually take advantage of riak shell scripts (e.g. riak, riak-admin, riak-repl) which can 
@@ -56,10 +53,9 @@ the escript. It also has the benefit of making the `/etc/nagios/nrpe.cfg` easier
 Speaking of `/etc/nagios/nrpe.cfg`, here's the kind of stuff you need to put in there.
 
 ```
-command[check_riak_up]=/usr/lib/riak_nagios/check_riak up 
-command[check_riak_end_to_end]=/usr/lib/riak_nagios/check_riak end_to_end localhost 8098 riak 
-command[check_riak_repl_to_remote_site]=/usr/lib/riak_nagios/check_riak repl server remote_site-on-local_site
-command[check_riak_repl_from_remote_site]=/usr/lib/riak_nagios/check_riak repl client local_site-on-remote_site
+command[check_riak_up]=riak-nagios up 
+command[check_riak_repl_to_remote_site]=riak-nagios repl-server remote_site-on-local_site
+command[check_riak_repl_from_remote_site]=riak-nagios repl-client local_site-on-remote_site
 ```
 
 After any change to this file, you'll need to restart the nrpe server. On ubuntu, that's as easy as `service nagios-nrpe-server restart`
@@ -70,7 +66,17 @@ Once it's configured, you can use this nrpe plugin to test. If you see any of th
 
 ```
 /usr/lib/nagios/plugins/check_nrpe -H 127.0.0.1 -c check_riak_up
-/usr/lib/nagios/plugins/check_nrpe -H 127.0.0.1 -c check_riak_end_to_end
 /usr/lib/nagios/plugins/check_nrpe -H 127.0.0.1 -c check_riak_repl_to_remote_site
 /usr/lib/nagios/plugins/check_nrpe -H 127.0.0.1 -c check_riak_repl_from_remote_site
 ```
+
+## Response
+#### check_riak_up 
+If this alert fires a critical alert, then riak on that node needs to be restarted by signing in and running `riak start`. If the node continues to crash, open a ticket with Basho
+
+#### check_riak_repl_to
+If this server side alert fires critical, there is an issue connecting to the client site, and you should open a ticket with basho
+If this alert fires a warning, there were too many replication processes running, but we were able to kill the extra ones automatically and no action is required on your part
+
+#### check_riak_repl_from
+If this alert fires critical, the replication client cannot communicate with the replication server and you should open a ticket with Basho.
