@@ -22,7 +22,16 @@ check_repl_server(ServerSite) ->
 check_repl_client(ClientSite) ->
     case is_leader() of
         true ->
-            ReplClients = [riak_repl_tcp_client:status(P) || {_,P,_,_} <- supervisor:which_children(riak_repl_client_sup), P /= undefined],
+            {Stats, _BadNodes} = rpc:multicall(riak_core_node_watcher:nodes(riak_kv), riak_repl_console, client_stats_rpc, []),
+            RPCStats = lists:flatten(lists:filter(fun({badrpc, _}) ->
+                    false;
+                (_) -> true
+                end, Stats)),
+
+            ReplClients = 
+                [riak_repl_tcp_client:status(P) || {_,P,_,_} <- supervisor:which_children(riak_repl_client_sup), P /= undefined]
+                ++
+                RPCStats,
             ReplClientStates = [S || {status, S} <- ReplClients],
             States = [lists:keyfind(state, 1, S) || S <- ReplClientStates, lists:keyfind(ClientSite, 2, S) =/= false],
             repl_state_check(States, ClientSite, "Client");
