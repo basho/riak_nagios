@@ -121,8 +121,27 @@ case "$1" in
         $NODETOOL nagios_rpc riak_nagios check_repl_client $@
         ;;
 
+    ports)
+        if [ $# -gt 3 ]; then
+            echo "WARNING: Usage: $SCRIPT ports [limit] [critical limit]"
+            exit 1
+        fi
+
+        RES=`$NODETOOL ping`
+        if [ "$RES" != "pong" ]; then
+            echo "CRITICAL: Node is not running!"
+            exit 2
+        fi
+
+        #default limit if not specified
+        LIMIT=${2:-5000}
+        CRITLIM=${3:-$(($LIMIT * 2))}
+
+        $NODETOOL nagios_rpc riak_nagios check_ports $LIMIT $CRITLIM
+        ;;
+
     *)
-        echo "Usage: $SCRIPT { up | repl-server [site] | repl-client [site] }"
+        echo "Usage: $SCRIPT { up | repl-server [site] | repl-client [site] | ports [limit] [critical limit] }"
         exit 1
         ;;
 esac

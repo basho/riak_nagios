@@ -1,5 +1,5 @@
 -module(riak_nagios).
--export([check_riak_up/0, check_repl_server/1, check_repl_client/1]).
+-export([check_riak_up/0, check_repl_server/1, check_repl_client/1, check_ports/2]).
 
 
 check_riak_up() ->
@@ -65,6 +65,15 @@ repl_state_check([{state, State}], SiteName, ReplType) ->
 repl_state_check([], SiteName, ReplType) ->
     unknown(io_lib:format("~s '~s' not found", [ReplType, SiteName])).
 
+check_ports(Norm,Crit) ->
+    Limit = list_to_integer(Norm),
+    Critlim = list_to_integer(Crit),
+    Portcnt = length(erlang:ports()),
+    if 
+        (Portcnt < Limit) -> okay(io_lib:format("~b of ~b ports in use", [Portcnt, Limit]));
+        (Portcnt > Critlim) -> critical(io_lib:format("~b of ~b ports in use", [Portcnt, Limit])); 
+        (Portcnt >= Limit) -> warning(io_lib:format("~b of ~b ports in use", [Portcnt, Limit]))
+    end.
 
 unknown(Message) -> nagios("UNKNOWN", Message, 3).
 critical(Message) -> nagios("CRITICAL", Message, 2).
