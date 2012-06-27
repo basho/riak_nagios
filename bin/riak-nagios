@@ -66,6 +66,13 @@ ERTS_PATH=$RUNNER_BASE_DIR/erts-$ERTS_VSN/bin
 # Setup command to control the node
 NODETOOL="$ERTS_PATH/escript $ERTS_PATH/nagtool $NAME_ARG $COOKIE_ARG"
 
+# Make sure the local node IS running
+RES=`$NODETOOL ping`
+if [ "$RES" != "pong" ]; then
+    echo "CRITICAL: Node is not running!"
+    exit 2
+fi
+
 # Check the first argument for instructions
 case "$1" in
     up)
@@ -74,29 +81,37 @@ case "$1" in
             exit 1
         fi
 
-        # Make sure the local node IS running
-        RES=`$NODETOOL ping`
-        if [ "$RES" != "pong" ]; then
-            echo "CRITICAL: Node is not running!"
-            exit 2
+        shift
+
+        $NODETOOL nagios_rpc riak_nagios check_riak_up $@
+        ;;
+
+    repl-servers)
+        if [ $# -ne 1 ]; then
+            echo "WARNING: Usage: $SCRIPT repl-servers"
+            exit 1
         fi
 
         shift
 
-        $NODETOOL nagios_rpc riak_nagios check_riak_up $@
+        $NODETOOL nagios_rpc riak_nagios check_repl_servers $@
+        ;;
+
+    repl-clients)
+        if [ $# -ne 1 ]; then
+            echo "WARNING: Usage: $SCRIPT repl-clients"
+            exit 1
+        fi
+
+        shift
+
+        $NODETOOL nagios_rpc riak_nagios check_repl_clients $@
         ;;
 
     repl-server)
         if [ $# -ne 2 ]; then
             echo "WARNING: Usage: $SCRIPT repl-server [site]"
             exit 1
-        fi
-
-        # Make sure the local node is running
-        RES=`$NODETOOL ping`
-        if [ "$RES" != "pong" ]; then
-            echo "CRITICAL: Node is not running!"
-            exit 2
         fi
 
         shift
@@ -110,13 +125,6 @@ case "$1" in
             exit 1
         fi
 
-        # Make sure the local node is running
-        RES=`$NODETOOL ping`
-        if [ "$RES" != "pong" ]; then
-            echo "CRITICAL: Node is not running!"
-            exit 2
-        fi
-
         shift
         $NODETOOL nagios_rpc riak_nagios check_repl_client $@
         ;;
@@ -127,12 +135,6 @@ case "$1" in
             exit 1
         fi
 
-        RES=`$NODETOOL ping`
-        if [ "$RES" != "pong" ]; then
-            echo "CRITICAL: Node is not running!"
-            exit 2
-        fi
-
         #default limit if not specified
         LIMIT=${2:-5000}
         CRITLIM=${3:-$(($LIMIT * 2))}
@@ -141,7 +143,7 @@ case "$1" in
         ;;
 
     *)
-        echo "Usage: $SCRIPT { up | repl-server [site] | repl-client [site] | ports [limit] [critical limit] }"
+        echo "Usage: $SCRIPT { up | repl-servers | repl-clients | repl-server [site] | repl-client [site] | ports [limit] [critical limit] }"
         exit 1
         ;;
 esac

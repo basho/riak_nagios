@@ -1,12 +1,121 @@
 -module(riak_nagios).
--export([check_riak_up/0, check_repl_server/1, check_repl_client/1, check_ports/2]).
-
+-export([check_riak_up/0, check_repl_clients/0, check_repl_servers/0,
+        check_repl_server/1, check_repl_client/1, check_ports/2]).
 
 check_riak_up() ->
     case lists:member(riak_kv, riak_core_node_watcher:services()) of
 		true -> okay("Riak is up");
 		_ -> critical("Riak is down")
 	end.
+
+check_repl_clients() ->
+    %% TODO: check for duplicate clients to the same site
+    case is_leader() of
+        true ->
+            Nodes = riak_core_node_watcher:nodes(riak_kv),
+            {ResL, _} = rpc:multicall(Nodes, supervisor, which_children, [riak_repl_client_sup]),
+            Children = lists:flatten([Res || Res <- ResL, filter_badrpc(Res)]),
+            ClientPids = [Pid || {_,Pid,_,_} <- Children, Pid /= undefined],
+            Checks = [check_repl_pid(riak_repl_tcp_client, Pid) || Pid <- ClientPids],
+            {BadStatus, TCPErrors} = lists:foldl(fun group_check/2, {[],[]}, Checks),
+            case {BadStatus, TCPErrors} of
+                {[], []} ->
+                    okay("Replication clients are working correctly");
+                {[], TCPErrors} ->
+                    Info = [io_lib:format("~s ~w - ~w", [Site, Pid, Reason]) || {Reason, Pid, Site} <- TCPErrors],
+                    Info1 = string:join(Info, ", "),
+                    warning("Stalled clients were detected and restarted. No action is required. Clients: " ++ Info1);
+                {BadStatus, _} ->
+                    BadPids = string:join([erlang:pid_to_list(P) || P <- BadStatus], ", "),
+                    critical("Unexpected return from riak_repl_tcp_client:status/1 - " ++ BadPids)
+            end;
+        false ->
+            okay(atom_to_list(node()) ++ " is not the replication leader")
+    end.
+
+check_repl_servers() ->
+    case is_leader() of
+        true ->
+            ServerPids = [Pid || {_,Pid,_,_} <- supervisor:which_children(riak_repl_server_sup)],
+            Checks = [check_repl_pid(riak_repl_tcp_server, Pid) || Pid <- ServerPids],
+            {BadStatus, TCPErrors} = lists:foldl(fun group_check/2, {[],[]}, Checks),
+            case {BadStatus, TCPErrors} of
+                {[], []} ->
+                    okay("Replication servers are working correctly");
+                {[], TCPErrors} ->
+                    Info = [io_lib:format("~s ~w - ~w", [Site, Pid, Reason]) || {Reason, Pid, Site} <- TCPErrors],
+                    Info1 = string:join(Info, ", "),
+                    warning("Stalled servers were detected and stopped. No action is required. Servers: " ++ Info1);
+                {BadStatus, _} ->
+                    BadPids = string:join([erlang:pid_to_list(P) || P <- BadStatus], ", "),
+                    critical("Unexpected return from riak_repl_tcp_server:status/1 - " ++ BadPids)
+            end;
+        false ->
+            okay(atom_to_list(node()) ++ " is not the replication leader")
+    end.
+
+filter_badrpc({badrpc, _}) -> false;
+filter_badrpc(_) -> true.
+
+group_check({error, {badstatus, Pid}}, {BadStatus, TCPErrors}) ->
+    {[Pid|BadStatus], TCPErrors};
+
+group_check({error, {Reason, Pid, Site}}, {BadStatus, TCPErrors}) ->
+    {BadStatus, [{Reason, Pid, Site}|TCPErrors]};
+
+group_check(_, Acc) ->
+    Acc.
+
+check_repl_pid(Mod, Pid) ->
+    case Mod:status(Pid) of
+        {status, Status} ->
+            {site, Site} = lists:keyfind(site, 1, Status),
+            case check_repl_status(Mod, Pid, Status) of
+                ok -> {ok, {Pid, Site}};
+                {error, Reason} -> {error, {Reason, Pid, Site}}
+            end;
+        _ ->
+            {error, {badstatus, Pid}}
+    end.
+
+check_repl_status(riak_repl_tcp_server, Pid, _Status) ->
+    check_repl_socket(riak_repl_tcp_server, Pid);
+
+check_repl_status(riak_repl_tcp_client, Pid, Status) ->
+    case lists:keyfind(connected, 1, Status) of
+        {connected, _, _} ->
+            check_repl_socket(riak_repl_tcp_client, Pid);
+        _ ->
+            ok
+    end.
+
+check_repl_socket(Mod, Pid) ->
+    %% http://www.erlang.org/doc/man/sys.html#get_status-1
+    Status = sys:get_status(Pid),
+    {status, _Pid, {module, gen_server}, SItem} = Status,
+    [_PDict, _SysState, _ParentPid, _Dbg, Misc] = SItem,
+    [State] = [State || {data,[{"State", State}]} <- Misc],
+    Socket = get_repl_socket_from_state(Mod, State),
+    case send_keepalive(Mod, Socket) of
+        ok ->
+            ok;
+        {error, Reason} ->
+            Pid ! {tcp_error, Socket, Reason},
+            {error, Reason}
+    end.
+
+%% Depends on the internal `state` record
+get_repl_socket_from_state(riak_repl_tcp_client, State) ->
+    %% riak_repl_tcp_client.erl
+    element(5, State);
+
+get_repl_socket_from_state(riak_repl_tcp_server, State) ->
+    %% riak_repl_tcp_server.erl
+    element(3, State).
+
+send_keepalive(Mod, Socket) ->
+    Node = erlang:node(Socket),
+    rpc:call(Node, Mod, send, [Socket, keepalive]).
 
 check_repl_server(ServerSite) ->
 	ReplServers = [riak_repl_tcp_server:status(P) || {_,P,_,_} <- supervisor:which_children(riak_repl_server_sup), P /= undefined],
