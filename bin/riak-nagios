@@ -7,7 +7,12 @@ RUNNER_BASE_DIR=/usr/lib/riak
 RUNNER_ETC_DIR=/etc/riak
 RUNNER_LIB_DIR=/usr/lib/riak
 RUNNER_LOG_DIR=/var/log/riak
-RUNNER_USER=riak
+# Assume nagios will be the RUNNER_USER to prevent problems on systems where
+# nagios is not allowed to sudo.
+RUNNER_USER=nagios
+# The nrpe daemon runs with HOME=/root which causes problems when Erlang 
+# attempts to create $HOME/.erlang.cookie.
+HOME=/var/lib/nagios
 
 # Make sure this script is running as the appropriate user
 if [ "$RUNNER_USER" -a "x$LOGNAME" != "x$RUNNER_USER" ]; then
