@@ -24,35 +24,23 @@
 #### Building
 
 ```bash
-./rebar compile
+make escript
 ```
 
 #### Deployment
 
 ```bash
-scp ebin/riak_nagios.beam root@s3p406.san2:/usr/lib/riak/lib/basho-patches/
-scp bin/nagtool root@s3p406.san2:/usr/lib/riak/erts-5.8.5/bin/
-scp bin/riak-nagios root@s3p406.san2:/usr/sbin/
+scp check_node root@s3p406.san2:/usr/sbin/
 ```
-
-You'll also have to attach to the riak console and `l(riak_nagios).` to reload the module.
-
-
-#### Permisions
-
-The Riak Nagios checks require sudoing to the riak user. The `nagios` user must be given permission to sudo to the `riak` user.
-
-On Ubuntu, that means adding the following to /etc/sudoers: `nagios  ALL=(riak) NOPASSWD: ALL`
 
 #### NRPE
 
 Riak related checks are configured in `/etc/nagios/nrpe.d/riak.cfg`, for example:
 
 ```
-command[check_riak_up]=riak-nagios up
-command[check_riak_repl_to_dfw1]=riak-nagios repl-server san2-to-dfw1
-command[check_riak_repl_to_ewr1]=riak-nagios repl-server san2-to-ewr1
-command[check_riak_repl_from_dfw1]=riak-nagios repl-client dfw1-to-san2
+command[check_riak_up]=/usr/lib/riak/erts-5.8.5/bin/escript check_node --node riak@s3p406.san2 riak_kv_up
+command[check_riak_repl]=/usr/lib/riak/erts-5.8.5/bin/escript check_node --node riak@s3p406.san2 riak_repl
+command[check_riak_cs_up]=/usr/lib/riak/erts-5.8.5/bin/escript check_node --node riak_cs@s3p406.san2 node_up
 ```
 
 After any change to this file, you'll need to restart the nrpe server. On ubuntu, that's as easy as `service nagios-nrpe-server restart`
@@ -66,22 +54,16 @@ Once it's configured, you can use this nrpe plugin to test. If you see any of th
 
 ```
 /usr/lib/nagios/plugins/check_nrpe -H 127.0.0.1 -c check_riak_up
-/usr/lib/nagios/plugins/check_nrpe -H 127.0.0.1 -c check_riak_repl_to_dfw1
-/usr/lib/nagios/plugins/check_nrpe -H 127.0.0.1 -c check_riak_repl_to_ewr1
-/usr/lib/nagios/plugins/check_nrpe -H 127.0.0.1 -c check_riak_repl_from_dfw1
+/usr/lib/nagios/plugins/check_nrpe -H 127.0.0.1 -c check_riak_repl
 ```
 
 ## Response
 
 #### check_riak_up 
 
-* If this alert fires a critical alert, then riak on that node needs to be restarted by signing in and running `riak start`. If the node continues to crash, open a ticket with Basho.
+* On critical alert: Riak needs to be restarted by signing in and running `riak start`. If alerts continue to be triggered after restarting Riak, open a ticket with Basho.
 
-#### check_riak_repl_to
+#### check_riak_repl
 
-* If this server side alert fires critical, there is an issue connecting to the client site, and you should open a ticket with Basho.
-* If this alert fires a warning, there were too many replication processes running, but we were able to kill the extra ones automatically and no action is required on your part.
-
-#### check_riak_repl_from
-
-* If this alert fires critical, the replication client cannot communicate with the replication server and you should open a ticket with Basho.
+* On critical alert: the check_node script received an unexpected return from Riak and further investigation is required. Open a ticket with Basho.
+* On warning alert: the check_node script detected a socket error. The script automatically informs Riak of the error and Riak resets the connection. No action is required.

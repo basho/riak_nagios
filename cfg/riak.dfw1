@@ -1,5 +1,0 @@
-command[check_riak_up]=riak-nagios up
-command[check_riak_repl_to_san2]=riak-nagios repl-server dfw1-to-san2
-command[check_riak_repl_to_ewr1]=riak-nagios repl-server dfw1-to-ewr1
-command[check_riak_repl_from_san2]=riak-nagios repl-client san2-to-dfw1
-command[check_riak_repl_from_ewr1]=riak-nagios repl-client ewr1-to-dfw1

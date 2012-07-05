@@ -1,3 +1,5 @@
 ebin
 .DS_Store
 src/*.beam
+deps
+check_node
