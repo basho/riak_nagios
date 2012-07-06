@@ -66,9 +66,10 @@ run_check(Check, Options, NonOptArgs) ->
 
 checks() ->
     [
-        {riak_repl, check_riak_repl},
         {node_up, check_node_up},
-        {riak_kv_up, check_riak_kv_up}
+        {riak_kv_up, check_riak_kv_up},
+        {file_handle_count, check_file_handle_count},
+        {riak_repl, check_riak_repl}
     ].
 
 usage() ->
