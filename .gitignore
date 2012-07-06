@@ -3,3 +3,4 @@ ebin
 src/*.beam
 deps
 check_node
+.eunit

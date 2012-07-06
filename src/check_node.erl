@@ -69,6 +69,7 @@ checks() ->
         {node_up, check_node_up},
         {riak_kv_up, check_riak_kv_up},
         {file_handle_count, check_file_handle_count},
+        {leveldb_compaction, check_leveldb_compaction},
         {riak_repl, check_riak_repl}
     ].
 
