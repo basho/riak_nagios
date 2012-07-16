@@ -32,14 +32,14 @@ run(Options, NonOptArgs) ->
                 {error, unknown_check} ->
                     unknown("Unkown check ~s", [Check]);
                 {error, Reason} ->
-                    unknown("Could not run check: ~s", [Reason])
+                    unknown("Could not run check: ~w", [Reason])
             end;
         {error, false} ->
             critical("Could not connect to ~s with cookie ~s", [Node, Cookie]);
         {error, ignored} ->
             unknown("net_kernel:connect/1 reports ~s is not alive", [Name]);
         {error, Reason} ->
-            unknown("net_kernel:start/1 failed: ~s", [Reason])
+            unknown("net_kernel:start/1 failed: ~w", [Reason])
     end.
 
 connect(Name, Node, Cookie) ->
