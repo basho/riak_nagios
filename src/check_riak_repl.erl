@@ -5,13 +5,13 @@
 run(Options, _NonOptArgs) ->
     Node = proplists:get_value(node, Options),
     Checks = check_repl(Node),
-    case lists:member(critical, Checks) of
+    case lists:member(unknown, Checks) of
         true ->
-            critical();
+            unknown();
         false ->
-            case lists:member(warning, Checks) of
+            case lists:member(socket_error, Checks) of
                 true ->
-                    warning();
+                    socket_error();
                 false ->
                     okay()
             end
@@ -40,7 +40,7 @@ repl_pids(Node, Sup) ->
 check_repl_pid(Node, Pid) ->
     case rpc:call(Node, erlang, process_info, [Pid]) of
         undefined ->
-            critical;
+            unknown;
         Info ->
             Links = proplists:get_value(links, Info),
             Port = first_port(Links),
@@ -53,7 +53,7 @@ check_repl_pid(Node, Pid) ->
                         undefined ->
                             %% port is closed
                             Pid ! {tcp_closed, Port},
-                            warning;
+                            socket_error;
                         _ ->
                             case sockname(Port) of
                                 {ok, _} ->
@@ -62,7 +62,7 @@ check_repl_pid(Node, Pid) ->
                                     %% something has gone wrong
                                     close_port(Port),
                                     Pid ! {tcp_closed, Port},
-                                    warning
+                                    socket_error
                             end
                     end
             end
@@ -93,11 +93,11 @@ riak_nodes(Node) ->
 filter_badrpc({badrpc, _}) -> false;
 filter_badrpc(_) -> true.
 
-critical() ->
-    {critical, "Unexpected return from process_info", []}.
+unknown() ->
+    {unknown, "Unexpected return from process_info", []}.
 
-warning() ->
-    {warning, "Socket errors were detected on some replication connections. These errors have been logged on the Riak node. No action is required", []}.
+socket_error() ->
+    {ok, "Socket errors were detected on some replication connections. These errors have been logged on the Riak node. No action is required", []}.
 
 okay() ->
     {ok, "Replication links working correctly.", []}.
