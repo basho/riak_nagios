@@ -17,16 +17,14 @@ run_cmd(Options, CmdOptions) ->
     Node = proplists:get_value(node, Options),
     Pid = rpc:call(Node, os, getpid, []),
     %% os:cmd/1 does not return exit code so we fake it the best way we can
-    Cmd = "O=$(lsof -n -p " ++ Pid ++ "  2>&1);echo $?;echo \"$O\"",    
+    Cmd = "O=$(lsof -n -p " ++ Pid ++ "  2>/dev/null|wc -l);echo $?;echo ${O}",
     Resp = rpc:call(Node, os, cmd, [Cmd]),
-    Lines = string:tokens(Resp, "\n"),
-    ExitCode = list_to_integer(lists:nth(1, Lines)),
-    Output = lists:nthtail(1, Lines),
+    [ExitCode0|Output] = string:tokens(Resp, "\n"),
+    ExitCode = list_to_integer(ExitCode0),
     handle_output(ExitCode, Output, Options, CmdOptions).
 
-handle_output(0, Output, _Options, CmdOptions) ->
-    %% subtract 1 to account for lsof header
-    Count = length(Output) - 1,
+handle_output(0, [Count0], _Options, CmdOptions) ->
+    Count = list_to_integer(Count0),
     Critical = proplists:get_value(critical, CmdOptions),
     Warning = proplists:get_value(warning, CmdOptions),
     Msg = "~B file descriptors in use",
@@ -36,9 +34,8 @@ handle_output(0, Output, _Options, CmdOptions) ->
         true -> {ok, Msg, [Count]}
     end;
 
-handle_output(Err, Output, _Options, _CmdOptions) ->
-    FirstLine = lists:nth(1, Output),
-    {unknown, "Error code: ~B, message: ~s", [Err, FirstLine]}.
+handle_output(ExitCode, Output, _Options, _CmdOptions) ->
+    {unknown, "Exit code: ~B, message: ~w", [ExitCode, Output]}.
 
 option_spec_list() ->
     [
