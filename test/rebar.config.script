@@ -1,0 +1,2 @@
+{ok, Terms} = file:consult("rebar.config").
+CONFIG ++ [{escript_name, ".eunit/check_node"}] ++ Terms.

@@ -1,4 +1,10 @@
-REBAR := ./rebar
+REBAR_BIN := ./rebar
+REBAR_CONFIG := ./rebar.config
+REBAR := $(REBAR_BIN) -C $(REBAR_CONFIG)
+ifdef suites
+	SUITE_OPTION := suites=$(suites)
+endif
+EUNIT_OPTIONS := $(SUITE_OPTION)
 
 .PHONY: deps test
 
@@ -17,11 +23,7 @@ distclean: clean
 	$(REBAR) delete-deps
 
 test: compile
-ifdef suite
-	$(REBAR) skip_deps=true eunit suite=$(suite)
-else
-	$(REBAR) skip_deps=true eunit
-endif
+	$(REBAR) skip_deps=true $(EUNIT_OPTIONS) eunit
 
 console: compile
 	erl -pa ebin deps/*/ebin
