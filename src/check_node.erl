@@ -49,29 +49,48 @@ try_run(Options, NonOptArgs, Checks) ->
     end.
 
 connect(Name, Node, Cookie) ->
-    case net_kernel:start([Name]) of
-        {ok, _} ->
-            erlang:set_cookie(node(), Cookie),
-            case net_kernel:hidden_connect_node(Node) of
-                true ->
-                    ok;
-                false ->
-                    {critical, "Could not connect to ~s with cookie ~s", [Node, Cookie]};
-                _ ->
-                    {unknown, "net_kernel:connect/1 reports ~s is not alive", [Name]}
-            end;
-        {error, Reason} ->
-            case check_cookie() of
-                {error, empty_cookie, CookieFile} ->
-                    {unknown, "The cookie file \"~s\" is empty.", [CookieFile]};
-                {error, bad_mode, CookieFile} ->
-                    {unknown, "The cookie file \"~s\" must only be accessible by owner", [CookieFile]};
-                {error, Reason1, CookieFile} ->
-                    {unknown, "Error accessing the cookie file \"~s\": ~w", [CookieFile, Reason1]};
-                _ ->
-                    {unknown, "net_kernel:start/1 error: ~w", [Reason]}
-            end
-    end.
+    retry_connect(Name, 0, Node, Cookie).
+    
+
+retry_connect(Name0, Number, Node, Cookie) ->
+    Name = list_to_atom(integer_to_list(Number) ++ atom_to_list(Name0)),
+    error_logger:tty(false),
+    R = case net_kernel:start([Name]) of
+            {ok, _} ->
+                erlang:set_cookie(node(), Cookie),
+                case net_kernel:hidden_connect_node(Node) of
+                    true ->
+                        ok;
+                    false ->
+                        {critical, "Could not connect to ~s with cookie ~s", [Node, Cookie]};
+                    _ ->
+                        {unknown, "net_kernel:connect/1 reports ~s is not alive", [Name]}
+                end;
+            {error, Reason} ->
+                case Reason of 
+                    {shutdown, _} -> 
+                        case Number < 250 of 
+                            true -> retry_connect(Name0, Number + 1, Node, Cookie);
+                            false -> {unknown, "Couldn't find unused nodename, too many concurrent checks.", []}
+                        end;
+                    _ ->
+                        case check_cookie() of
+                            {error, empty_cookie, CookieFile} ->
+                                {unknown, "The cookie file \"~s\" is empty.", [CookieFile]};
+                            {error, bad_mode, CookieFile} ->
+                                {unknown, "The cookie file \"~s\" must only be accessible by owner", [CookieFile]};
+                            {error, Reason1, CookieFile} ->
+                                {unknown, "Error accessing the cookie file \"~s\": ~w", [CookieFile, Reason1]};
+                            _ ->
+                                {unknown, "net_kernel:start/1 error: ~w", [Reason]}
+                        end
+                end
+        end,
+    error_logger:tty(true),
+    R.
+
+            
+          
 
 run_check(Check, Options, NonOptArgs, Checks) ->
     case lists:keyfind(Check, 1, Checks) of
