@@ -106,6 +106,7 @@ checks() ->
         {riak_kv_up, check_riak_kv_up},
         {file_handle_count, check_file_handle_count},
         {leveldb_compaction, check_leveldb_compaction},
+        {msg_q, check_msg_q},
         {riak_repl, check_riak_repl}
     ].
 
