@@ -20,29 +20,26 @@ run(Options, _NonOptArgs) ->
 check_repl(Node) ->
     case is_leader(Node) of
         true ->
-            Clients = check_repl(Node, riak_repl_client_sup),
-            Servers = check_repl(Node, riak_repl_server_sup),
-            Clients ++ Servers;
+            Pids = repl_pids(Node),
+            [check_repl_pid(Node, Pid) || Pid <- Pids];
         false ->
             []
     end.
 
-check_repl(Node, Sup) ->
-    Pids = repl_pids(Node, Sup),
-    [check_repl_pid(Node, Pid) || Pid <- Pids].
+repl_pids(Node) ->
+    repl_server_pids(Node) ++ repl_client_pids(Node).
 
-repl_pids(Node, Sup) ->
-    Nodes = riak_nodes(Node),
-    {ResL, _} = rpc:multicall(Nodes, supervisor, which_children, [Sup]),
-    Children = lists:flatten([Res || Res <- ResL, filter_badrpc(Res)]),
-    [Pid || {_,Pid,_,_} <- Children, Pid /= undefined].
+repl_server_pids(Node) ->
+    [Pid || {Pid, _, _} <- rpc:call(Node, riak_repl_console, server_stats_rpc, [])].
+
+repl_client_pids(Node) ->
+    [Pid || {Pid, _, _} <- rpc:call(Node, riak_repl_console, client_stats_rpc, [])].
 
 check_repl_pid(Node, Pid) ->
-    case rpc:call(Node, erlang, process_info, [Pid]) of
+    case rpc:call(Node, rpc, pinfo, [Pid, links]) of
         undefined ->
             unknown;
-        Info ->
-            Links = proplists:get_value(links, Info),
+        {links, Links} ->
             Port = first_port(Links),
             case Port of
                 undefined ->
@@ -68,7 +65,7 @@ check_repl_pid(Node, Pid) ->
             end
     end.
 
-first_port([Link|_Links]) when is_port(Link) -> Link;
+first_port([Port|_Links]) when is_port(Port) -> Port;
 first_port([_|Links]) -> first_port(Links);
 first_port([]) -> undefined.
 
@@ -86,12 +83,6 @@ close_port(Socket) ->
 
 is_leader(Node) ->
     rpc:call(Node, riak_repl_leader, leader_node, []) == Node.
-
-riak_nodes(Node) ->    
-    rpc:call(Node, riak_core_node_watcher, nodes, [riak_kv]).
-
-filter_badrpc({badrpc, _}) -> false;
-filter_badrpc(_) -> true.
 
 unknown() ->
     {unknown, "Unexpected return from process_info", []}.
