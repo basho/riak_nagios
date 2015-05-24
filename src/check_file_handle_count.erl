@@ -15,9 +15,8 @@ run(Options, NonOptArgs) ->
 
 run_cmd(Options, CmdOptions) ->
     Node = proplists:get_value(node, Options),
-    Pid = rpc:call(Node, os, getpid, []),
     %% os:cmd/1 does not return exit code so we fake it the best way we can
-    Cmd = "O=$(lsof -n -p " ++ Pid ++ "  2>/dev/null|wc -l);echo $?;echo ${O}",
+    Cmd = "O=$(awk '{print $1}' /proc/sys/fs/file-nr 2>/dev/null);echo $?;echo ${O}",
     Resp = rpc:call(Node, os, cmd, [Cmd]),
     [ExitCode0|Output] = string:tokens(Resp, "\n"),
     ExitCode = list_to_integer(ExitCode0),
