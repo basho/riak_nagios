@@ -8,7 +8,7 @@ Vagrant.configure(2) do |config|
   config.vm.provision "shell", inline: <<-SHELL
 apt-get update
 apt-get install -y curl git erlang
-curl -s https://packagecloud.io/install/repositories/basho/riak/script.deb | bash
+curl -s https://packagecloud.io/install/repositories/basho/riak/script.deb.sh | bash
 apt-get install -y riak
 echo "ulimit -n 65536" > /etc/default/riak
 perl -pi -e 's/^storage_backend =.*/storage_backend = leveldb/' /etc/riak/riak.conf
